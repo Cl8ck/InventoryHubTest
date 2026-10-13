@@ -1,0 +1,82 @@
+@page "/products"
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.WebAssembly.Http
+@using Shared.Models
+@inject HttpClient Http
+@inject ILogger<FetchProducts> Logger
+
+<PageTitle>Products</PageTitle>
+
+<h1>Products</h1>
+
+@if (isLoading)
+{
+    <p role="status">Loading products...</p>
+}
+else if (errorMessage is not null)
+{
+    <p class="alert alert-danger" role="alert">@errorMessage</p>
+}
+else if (products is { Length: 0 })
+{
+    <p>No products are currently available.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Price</th>
+                    <th scope="col">Stock</th>
+                    <th scope="col">Category</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var product in products!)
+                {
+                    <tr>
+                        <td>@product.Name</td>
+                        <td>@product.Price.ToString("C")</td>
+                        <td>@product.Stock</td>
+                        <td>@product.Category.Name</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private Product[]? products;
+    private string? errorMessage;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "api/products");
+            request.SetBrowserRequestCredentials(BrowserRequestCredentials.Include);
+            using var response = await Http.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            products = await response.Content.ReadFromJsonAsync<Product[]>()
+                ?? throw new JsonException("The product API returned an empty response.");
+        }
+        catch (HttpRequestException exception)
+        {
+            Logger.LogError(exception, "Unable to retrieve products from the API.");
+            errorMessage = "Products could not be loaded. Please try again later.";
+        }
+        catch (JsonException exception)
+        {
+            Logger.LogError(exception, "The product API returned an invalid response.");
+            errorMessage = "The product data could not be read. Please try again later.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

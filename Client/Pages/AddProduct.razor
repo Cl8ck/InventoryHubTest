@@ -1,0 +1,128 @@
+@page "/products/add"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.WebAssembly.Http
+@using Shared.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject ILogger<AddProduct> Logger
+
+<PageTitle>Add Product</PageTitle>
+
+<h1>Add Product</h1>
+
+<EditForm Model="@form" OnValidSubmit="CreateProductAsync">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label class="form-label" for="product-name">Name</label>
+        <InputText id="product-name" class="form-control" @bind-Value="form.Name" />
+        <ValidationMessage For="@(() => form.Name)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="product-price">Price</label>
+        <InputNumber id="product-price" class="form-control" @bind-Value="form.Price" />
+        <ValidationMessage For="@(() => form.Price)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="product-stock">Stock</label>
+        <InputNumber id="product-stock" class="form-control" @bind-Value="form.Stock" />
+        <ValidationMessage For="@(() => form.Stock)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="product-category">Category</label>
+        <InputText id="product-category" class="form-control" @bind-Value="form.CategoryName" />
+        <ValidationMessage For="@(() => form.CategoryName)" />
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <p class="alert alert-danger" role="alert">@errorMessage</p>
+    }
+
+    <button class="btn btn-primary" type="submit" disabled="@isSubmitting">
+        @(isSubmitting ? "Adding..." : "Add Product")
+    </button>
+</EditForm>
+
+@code {
+    private readonly ProductForm form = new();
+    private string? errorMessage;
+    private bool isSubmitting;
+
+    private async Task CreateProductAsync()
+    {
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "api/products")
+            {
+                Content = JsonContent.Create(new CreateProductRequest
+                {
+                    Name = form.Name,
+                    Price = form.Price,
+                    Stock = form.Stock,
+                    CategoryName = form.CategoryName
+                })
+            };
+            request.SetBrowserRequestCredentials(BrowserRequestCredentials.Include);
+
+            using var response = await Http.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            Navigation.NavigateTo("/products");
+        }
+        catch (HttpRequestException exception)
+        {
+            Logger.LogError(exception, "Unable to add product through the API.");
+            errorMessage = "The product could not be added. Please try again.";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private sealed class ProductForm : IValidatableObject
+    {
+        [Required, StringLength(200)]
+        public string Name { get; set; } = string.Empty;
+
+        public decimal Price { get; set; }
+
+        [Range(0, int.MaxValue)]
+        public int Stock { get; set; }
+
+        [Required, StringLength(100)]
+        public string CategoryName { get; set; } = string.Empty;
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                yield return new ValidationResult("Name is required.", [nameof(Name)]);
+            }
+
+            if (Price is < 0.01m or > 999999.99m)
+            {
+                yield return new ValidationResult(
+                    "Price must be between 0.01 and 999999.99.",
+                    [nameof(Price)]);
+            }
+
+            if (Stock < 0)
+            {
+                yield return new ValidationResult("Stock cannot be negative.", [nameof(Stock)]);
+            }
+
+            if (string.IsNullOrWhiteSpace(CategoryName))
+            {
+                yield return new ValidationResult("Category is required.", [nameof(CategoryName)]);
+            }
+        }
+    }
+}
